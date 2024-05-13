@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Assignment 1</title>
+  <link rel="stylesheet" href="/styles/global.css">
+  <style>
+    a {
+      display: block;
+      }
+  </style>
+</head>
+<body>
+<h1>Welcome,<span id="username"></span></h1>
+<img src="/http://localhost:3456/random-image" alt="random image">
+<a href="/logout">Logout</a>
+</body>
+<script>
+    fetch("/userdata", {
+        method: "GET",
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok: ' + response.statusText);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.username) {
+                document.getElementById("username").innerHTML = data.username;
+            }
+        })
+        .catch(e => {
+            console.log('Error:', e);
+        });
+
+    fetch("/random-img", {
+        method: "GET",
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok: ' + response.statusText);
+            }
+            return response.url;
+        })
+        .then(url => {
+            document.querySelector("img").src = url;
+        })
+        .catch(e => {
+            console.log('Error:', e);
+        });
+</script>
+
+</html>
