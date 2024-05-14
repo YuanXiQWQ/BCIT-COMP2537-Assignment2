@@ -1,7 +1,7 @@
 {
   "name": "assignment1",
   "description": "BCIT's CST Comp2537 Assignment 2",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Jiarui Xing",
   "license": "MIT",
   "scripts": {

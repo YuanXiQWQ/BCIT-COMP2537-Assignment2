@@ -1,6 +1,3 @@
-/**
- * Imports
- */
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const express = require("express");
 const path = require("node:path");
@@ -12,9 +9,6 @@ const app = express();
 require("dotenv").config();
 const port = process.env.PORT || 10000;
 
-/**
- * MongoDB Initialisation
- */
 const config = {
     user: process.env.MONGODB_USER,
     password: process.env.MONGODB_PASSWORD,
@@ -25,7 +19,6 @@ const config = {
 };
 const uri = `mongodb+srv://${config.user}:${config.password}@${config.host}/?retryWrites=${config.retryWrites}&w=${config.writeConcern}&appName=${config.appName}`;
 
-// Instantiate MongoDB obj as "client"
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -34,16 +27,11 @@ const client = new MongoClient(uri, {
     }
 });
 
-// Connect (and test)
 ;(async () => {
     try {
         await client.connect();
-
-        // Test the connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
-
-        // List databases
         const databasesList = await client.db().admin().listDatabases();
         databasesList.databases.forEach((db) => console.log(`DB: ${db.name}`));
     } catch (e) {
@@ -66,35 +54,23 @@ app.use(express.static(__dirname + "/public"));
 app.set('view engine', 'ejs');
 app.listen(port, () => console.log(`Server started on http://localhost:${port}`));
 
-/**
- * Set middleware and static files
- */
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(session({
     secret: process.env.NODE_SESSION_SECRET,
     store: mongoStore,
-    // 1 hour in ms
     cookie: { maxAge: 1000 * 60 * 60 },
     saveUninitialized: false,
     resave: false
 }));
 app.use("/styles", express.static(path.resolve(__dirname, "./public/styles")));
 
-/**
- * Joi validation
- */
 const userSchema = Joi.object({
     username: Joi.string().alphanum().min(3).max(25).required(),
     email: Joi.string().email().required(),
     password: Joi.string().required()
 });
 
-/**
- * Validate user input
- * @param input
- * @throws {Error}
- */
 function validateUserInput(input) {
     const { error } = userSchema.validate(input);
     if (error) {
@@ -102,13 +78,6 @@ function validateUserInput(input) {
     }
 }
 
-/**
- * Function to check if the user is an admin.
- *
- * @param req The request object.
- * @param res The response object.
- * @param next The next function.
- */
 function isAdmin(req, res, next) {
     console.log("Checking if user is admin:", req.session.userType);
     if (!req.session.username) {
@@ -122,18 +91,10 @@ function isAdmin(req, res, next) {
     }
 }
 
-/**
- * Checks if the id is a valid ObjectId.
- * @param id The id to check.
- * @return {boolean} True if the id is a valid ObjectId, false otherwise.
- */
 function isValidObjectId(id) {
     return ObjectId.isValid(id) && (new ObjectId(id)).toString() === id;
 }
 
-/**
- * Get requests
- */
 app.get("/", (req, res) => {
     res.redirect("/index");
 });
@@ -271,13 +232,37 @@ app.get("/admin/delete-user/:userId", isAdmin, async (req, res) => {
     }
 });
 
+app.get("/admin/edit-user/:userId", isAdmin, async (req, res) => {
+    const userId = req.params.userId;
+
+    if (!isValidObjectId(userId)) {
+        return res.status(400).send("Invalid user ID");
+    }
+
+    try {
+        await client.connect();
+        const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+        if (!user) {
+            return res.status(404).send("User not found");
+        }
+        res.render("edit-user", {
+            user,
+            username: req.session.username,
+            userType: req.session.userType
+        });
+    } catch (error) {
+        console.error("Failed to fetch user:", error);
+        res.status(500).send("Failed to fetch user due to server error");
+    } finally {
+        await client.close();
+    }
+});
+
+
 app.get("*", (req, res) => {
     res.status(404).render("404");
 });
 
-/**
- * Post requests
- */
 app.post("/login", (req, res) => {
     const { username, password } = req.body;
     try {
@@ -386,13 +371,6 @@ app.post("/admin/edit-user/:userId", isAdmin, (req, res) => {
     });
 });
 
-/**
- * Function to create a new user in MongoDB.
- * @param username The username.
- * @param email    The user email.
- * @param password The user password.
- * @throws {Error} If user input is invalid.
- */
 function createUser(username, email, password) {
     return new Promise((resolve, reject) => {
         validateUserInput({ username, email, password });
