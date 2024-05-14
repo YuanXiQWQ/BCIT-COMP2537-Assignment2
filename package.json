@@ -1,16 +1,17 @@
 {
   "name": "assignment1",
-  "description": "BCIT's CST Comp2537 Assignment 1",
-  "version": "1.0.3",
+  "description": "BCIT's CST Comp2537 Assignment 2",
+  "version": "1.0.0",
   "author": "Jiarui Xing",
   "license": "MIT",
   "scripts": {
-    "run": "node index.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
     "connect-mongo": "^5.1.0",
     "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "joi": "^17.13.1",

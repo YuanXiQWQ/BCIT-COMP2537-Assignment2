@@ -1,9 +1,8 @@
 /**
  * Imports
  */
-const {MongoClient, ServerApiVersion} = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const express = require("express");
-const port = process.env.PORT || 4000;
 const path = require("node:path");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
@@ -11,7 +10,7 @@ const bcrypt = require("bcrypt");
 const Joi = require("joi");
 const app = express();
 require("dotenv").config();
-
+const port = process.env.PORT || 10000;
 
 /**
  * MongoDB Initialisation
@@ -26,10 +25,12 @@ const config = {
 };
 const uri = `mongodb+srv://${config.user}:${config.password}@${config.host}/?retryWrites=${config.retryWrites}&w=${config.writeConcern}&appName=${config.appName}`;
 
-// Instantiate MangoDB obj as "client"
+// Instantiate MongoDB obj as "client"
 const client = new MongoClient(uri, {
     serverApi: {
-        version: ServerApiVersion.v1, strict: true, deprecationErrors: true
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true
     }
 });
 
@@ -39,7 +40,7 @@ const client = new MongoClient(uri, {
         await client.connect();
 
         // Test the connection
-        await client.db("admin").command({ping: 1});
+        await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
         // List databases
@@ -51,6 +52,7 @@ const client = new MongoClient(uri, {
         await client.close();
     }
 })().catch(console.dir);
+
 const userCollection = client.db("user").collection("userConfig");
 
 const mongoStore = MongoStore.create({
@@ -58,39 +60,32 @@ const mongoStore = MongoStore.create({
     crypto: {
         secret: process.env.MONGODB_SESSION_SECRET
     }
-})
+});
 
 app.use(express.static(__dirname + "/public"));
-
+app.set('view engine', 'ejs');
+app.listen(port, () => console.log(`Server started on http://localhost:${port}`));
 
 /**
  * Set middleware and static files
  */
-app.use(express.urlencoded({extended: true}));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(session({
     secret: process.env.NODE_SESSION_SECRET,
     store: mongoStore,
     // 1 hour in ms
-    cookie: {maxAge: 1000 * 60 * 60},
+    cookie: { maxAge: 1000 * 60 * 60 },
     saveUninitialized: false,
     resave: false
 }));
 app.use("/styles", express.static(path.resolve(__dirname, "./public/styles")));
 
-const imgPath = path.resolve(__dirname, "./public/images");
-
-const images = [
-    imgPath + "/Nyan.gif",
-    imgPath + "/Popopopop.gif",
-    imgPath + "/咣当.gif"
-]
-
 /**
  * Joi validation
  */
 const userSchema = Joi.object({
-    username: Joi.string().alphanum().required(),
+    username: Joi.string().alphanum().min(3).max(25).required(),
     email: Joi.string().email().required(),
     password: Joi.string().required()
 });
@@ -101,34 +96,40 @@ const userSchema = Joi.object({
  * @throws {Error}
  */
 function validateUserInput(input) {
-    const {error} = userSchema.validate(input);
+    const { error } = userSchema.validate(input);
     if (error) {
         throw new Error("Invalid user input: " + error.details[0].message);
     }
 }
 
-const regexErrorMessage = `
-            <h1>400: Invalid Input</h1>
-            <pre>
-            Checklist for your input:
-            Username needs 3–25 characters.
-            Email should follow the email format.
-            The Password must contain 5–25 characters, including at least 1 letter, 1 number and 1 special character(!@#$%^&*).
-            Input should be String.
-            Username, email and password should not be empty.
-            
-            Invalid characters/rules:
-            Cannot start with "=" while end with "--".
-            Cannot start and end with one or more letter or number(\\w+) while "%$#&" within.
-            Cannot have "||".
-            Cannot have "and", "or" (single word, which space surrounds).
-            Cannot have the following keywords:
-            "select", "update", "union", "and", "or", "delete", "insert", "truncate", "char", "into", "substr", "ascii", "declare", "exec", "count", "master", "drop", "execute"
-            </pre>
-            <form action="/index">
-              <input type="submit" value="Back">
-            </form>
-        `
+/**
+ * Function to check if the user is an admin.
+ *
+ * @param req The request object.
+ * @param res The response object.
+ * @param next The next function.
+ */
+function isAdmin(req, res, next) {
+    console.log("Checking if user is admin:", req.session.userType);
+    if (!req.session.username) {
+        res.redirect("/login");
+    } else if (req.session.userType === "admin") {
+        next();
+    } else {
+        res.status(403).render("400", {
+            message: "Access denied. You must be an administrator."
+        });
+    }
+}
+
+/**
+ * Checks if the id is a valid ObjectId.
+ * @param id The id to check.
+ * @return {boolean} True if the id is a valid ObjectId, false otherwise.
+ */
+function isValidObjectId(id) {
+    return ObjectId.isValid(id) && (new ObjectId(id)).toString() === id;
+}
 
 /**
  * Get requests
@@ -138,58 +139,31 @@ app.get("/", (req, res) => {
 });
 
 app.get("/index", (req, res) => {
-    console.log("User accessed");
-    let HTML = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <title>Assignment 1</title>
-      <link rel="stylesheet" href="/styles/global.css">
-    </head>
-    <body>
-    `
-    if (req.session.username) {
-        console.log("User logged in, go to member");
-        HTML += `
-        <h1>Hello, ${req.session.username}!</h1>
-        <a href="/member">Go to member area</a>
-        <a href="/logout">Logout</a>
-        `
-    } else {
-        console.log("User not logged in, go to index");
-        HTML += `
-        <a href="/login"> login</a>
-        <a href="/signup">register</a>
-        `
-    }
-
-    HTML += `
-    </body>
-    </html>
-    `
-    res.send(HTML);
+    res.render("index", { username: req.session.username, userType: req.session.userType });
 });
 
 app.get("/login", (req, res) => {
-    if (req.session.username) {
-        res.redirect("/index")
-    } else {
-        res.sendFile(path.resolve(__dirname, "./app/html/login.html"));
-    }
+    if (req.session.username) res.redirect("/index");
+    else res.render("login");
 });
 
 app.get("/signup", (req, res) => {
-    if (req.session.username) {
-        res.redirect("/index")
-    } else {
-        res.sendFile(path.resolve(__dirname, "./app/html/signup.html"));
-    }
+    if (req.session.username) res.redirect("/index");
+    else res.render("signup");
 });
 
 app.get("/member", (req, res) => {
     if (req.session.username) {
-        res.sendFile(path.resolve(__dirname, "./app/html/member.html"));
+        const images = [
+            "/images/Nyan.gif",
+            "/images/Popopopop.gif",
+            "/images/咣当.gif"
+        ];
+        res.render("member", {
+            username: req.session.username,
+            userType: req.session.userType,
+            images: images
+        });
     } else {
         res.redirect("/login");
     }
@@ -200,74 +174,134 @@ app.get("/logout", (req, res) => {
     res.redirect("/index");
 });
 
-app.get("/random-img", (req, res) => {
-    const randomIndex = Math.floor(Math.random() * images.length);
-    const imagePath = path.resolve(__dirname, images[randomIndex]);
-    console.log(imagePath);
-    res.sendFile(imagePath);
-});
-
 app.get("/userdata", (req, res) => {
     console.log("get request for userdata");
     res.json({
-        username: req.session.username, email: req.session.email
+        username: req.session.username,
+        email: req.session.email
     });
 });
 
+app.get("/admin", isAdmin, (req, res) => {
+    client.connect()
+        .then(() => userCollection.find({}).toArray())
+        .then(users => {
+            res.render("admin", {
+                users: users,
+                username: req.session.username,
+                userType: req.session.userType
+            });
+        })
+        .catch(error => {
+            console.error("Failed to fetch users:", error);
+            res.status(500).send("Server error");
+        })
+        .finally(() => client.close());
+});
+
+app.get("/admin/promote/:userId", isAdmin, async (req, res) => {
+    const userId = req.params.userId;
+    if (!isValidObjectId(userId)) {
+        return res.status(400).send("Invalid user ID");
+    }
+
+    try {
+        await client.connect();
+        const result = await userCollection.updateOne(
+            { _id: new ObjectId(userId) },
+            { $set: { userType: "admin" } }
+        );
+        if (result.matchedCount === 0) {
+            res.status(404).send("User not found");
+        } else {
+            res.redirect("/admin");
+        }
+    } catch (error) {
+        console.error("Failed to promote user:", error);
+        res.status(500).send("Failed to promote user due to server error");
+    } finally {
+        await client.close();
+    }
+});
+
+app.get("/admin/demote/:userId", isAdmin, async (req, res) => {
+    const userId = req.params.userId;
+    if (!isValidObjectId(userId)) {
+        return res.status(400).send("Invalid user ID");
+    }
+
+    try {
+        await client.connect();
+        const result = await userCollection.updateOne(
+            { _id: new ObjectId(userId) },
+            { $set: { userType: "user" } }
+        );
+        if (result.matchedCount === 0) {
+            res.status(404).send("User not found");
+        } else {
+            res.redirect("/admin");
+        }
+    } catch (error) {
+        console.error("Failed to demote user:", error);
+        res.status(500).send("Failed to demote user due to server error");
+    } finally {
+        await client.close();
+    }
+});
+
+app.get("/admin/delete-user/:userId", isAdmin, async (req, res) => {
+    const userId = req.params.userId;
+    if (!isValidObjectId(userId)) {
+        return res.status(400).send("Invalid user ID");
+    }
+
+    try {
+        await client.connect();
+        const result = await userCollection.deleteOne({ _id: new ObjectId(userId) });
+        if (result.deletedCount === 0) {
+            res.status(404).send("User not found");
+        } else {
+            res.redirect("/admin");
+        }
+    } catch (error) {
+        console.error("Failed to delete user:", error);
+        res.status(500).send("Failed to delete user due to server error");
+    } finally {
+        await client.close();
+    }
+});
+
 app.get("*", (req, res) => {
-    res.status(404).send(`
-                    <h1>404: Page Not Found</h1>
-                    <form action="/index">
-                        <input type="submit" value="Back">
-                    </form>
-                    `);
+    res.status(404).render("404");
 });
 
 /**
  * Post requests
  */
 app.post("/login", (req, res) => {
-    const {username, password} = req.body;
+    const { username, password } = req.body;
     try {
-        const email = "nothing@no.com"
-        validateUserInput({username, email, password});
+        validateUserInput({ username, email: "temp@example.com", password });
 
         client.connect()
-            .then(() => userCollection.findOne({username: username}))
+            .then(() => userCollection.findOne({ username: username }))
             .then(user => {
                 if (user) {
                     return bcrypt.compare(password, user.password)
                         .then(match => {
                             if (match) {
-                                req.session.username = username;
-                                console.log(
-                                    "Spawn new session obj: " + JSON.stringify(req.session));
+                                req.session.username = user.username;
+                                req.session.userType = user.userType;
+                                console.log("User logged in, session:", req.session);
                                 res.redirect("/member");
-                                console.log("User logged in");
                             } else {
                                 console.log("Wrong password");
-                                res.send(`
-                                <h1>Wrong Username or Password</h1>
-                                <form action="/login">
-                                    <input type="submit" value="Try Again">
-                                </form>
-                                <form action="/signup">
-                                    <input type="submit" value="Register">
-                                </form>
-                            `);
+                                res.send("Wrong Username or Password");
                             }
                         });
                 } else {
                     console.log("User does not exist");
-                    res.send(`
-                    <h1>User not found</h1>
-                    <form action="/login">
-                        <input type="submit" value="Try Again">
-                    </form>
-                    <form action="/signup">
-                        <input type="submit" value="Register">
-                    </form>
-                `);
+                    res.send("User not found");
                 }
             })
             .catch(e => {
@@ -276,20 +310,80 @@ app.post("/login", (req, res) => {
             })
             .finally(() => client.close());
     } catch (e) {
-        res.status(400).send(regexErrorMessage);
+        res.status(400).render("400", {
+            message: "Invalid input data. Please check your input and try again."
+        });
     }
 });
 
-
 app.post("/signup", (req, res) => {
     try {
-        createUser(req.body.username, req.body.email, req.body.password);
-        req.session.username = req.body.username;
-        console.log("Spawn new session obj: " + JSON.stringify(req.session));
-        res.redirect("/member");
+        createUser(req.body.username, req.body.email, req.body.password)
+            .then(() => {
+                req.session.username = req.body.username;
+                res.redirect("/member");
+            })
+            .catch(error => {
+                console.error("Failed to create user:", error);
+                res.status(500).send("Failed to create user: " + error.message);
+            });
     } catch (e) {
-        res.status(400).send(regexErrorMessage);
+        res.status(400).render("400", {
+            message: "Invalid input data. Please check your input and try again."
+        });
     }
+});
+
+app.post("/admin/edit-user/:userId", isAdmin, async (req, res) => {
+    const { username, email, password } = req.body;
+    const userId = req.params.userId;
+
+    if (!isValidObjectId(userId)) {
+        return res.status(400).send("Invalid user ID");
+    }
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await client.connect();
+        const result = await userCollection.updateOne(
+            { _id: new ObjectId(userId) },
+            { $set: { username, email, password: hashedPassword } }
+        );
+        if (result.matchedCount === 0) {
+            res.status(404).send("User not found");
+        } else {
+            res.redirect("/admin");
+        }
+    } catch (error) {
+        console.error("Failed to edit user:", error);
+        res.status(500).send("Failed to edit user due to server error");
+    } finally {
+        await client.close();
+    }
+});
+
+app.post("/admin/create-user", isAdmin, (req, res) => {
+    const { username, email, password } = req.body;
+    createUser(username, email, password)
+        .then(() => res.redirect("/admin"))
+        .catch(error => res.status(500).send("Failed to create user: " + error.message));
+});
+
+app.post("/admin/edit-user/:userId", isAdmin, (req, res) => {
+    const { username, email, password } = req.body;
+    const userId = req.params.userId;
+    bcrypt.hash(password, 10, (err, hashedPassword) => {
+        if (err) {
+            res.status(500).send("Error hashing password");
+        } else {
+            client.connect()
+                .then(() => userCollection.updateOne({ _id: new MongoClient.ObjectId(userId) },
+                    { $set: { username, email, password: hashedPassword } }))
+                .then(() => res.redirect("/admin"))
+                .catch(error => res.status(500).send("Failed to edit user: " + error.message))
+                .finally(() => client.close());
+        }
+    });
 });
 
 /**
@@ -300,15 +394,18 @@ app.post("/signup", (req, res) => {
  * @throws {Error} If user input is invalid.
  */
 function createUser(username, email, password) {
-    validateUserInput({username, email, password});
-
-    client.connect()
-        .then(() => bcrypt.hash(password, 10)
-            .then((hashedPassword) => userCollection
-                .insertOne({username: username, email: email, password: hashedPassword})))
-        .then(() => console.log("User created"))
-        .catch(e => console.error(e))
-        .finally(() => client.close());
+    return new Promise((resolve, reject) => {
+        validateUserInput({ username, email, password });
+        client.connect()
+            .then(() => bcrypt.hash(password, 10))
+            .then((hashedPassword) => userCollection.insertOne({
+                username: username,
+                email: email,
+                password: hashedPassword,
+                userType: "user"
+            }))
+            .then(result => resolve(result))
+            .catch(e => reject(e))
+            .finally(() => client.close());
+    });
 }
-
-app.listen(port, () => console.log(`Server started on port ${port}`));
