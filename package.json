@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node index.js"
   },
+  "main": "index.js",
+  "github": "https://github.com/YuanXiQWQ/BCIT-COMP2537-Assignment2",
   "dependencies": {
     "bcrypt": "^5.1.1",
     "connect-mongo": "^5.1.0",
